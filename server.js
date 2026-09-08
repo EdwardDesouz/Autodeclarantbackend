@@ -296,6 +296,9 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 
 dotenv.config();
+console.log('DEBUG — EMAIL_USERNAME:', process.env.EMAIL_USERNAME);
+console.log('DEBUG — EMAIL_PASSWORD length:', process.env.EMAIL_PASSWORD?.length);
+console.log('DEBUG — EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD);
 const app = express();
 app.use(cors());
 app.use(express.json());
