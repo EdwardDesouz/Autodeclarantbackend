@@ -1,0 +1,6 @@
+◇ injected env (5) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+DEBUG — EMAIL_USERNAME: test_agent@ktt.sg
+DEBUG — EMAIL_PASSWORD length: 8
+DEBUG — EMAIL_PASSWORD: Ktt@2026
+Backend running on http://192.168.1.40:\\.\pipe\c1033823-f556-48bb-802f-7fce1fac27aa
+(also reachable locally at http://localhost:\\.\pipe\c1033823-f556-48bb-802f-7fce1fac27aa)

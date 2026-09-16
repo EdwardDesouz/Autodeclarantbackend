@@ -1,0 +1,6 @@
+◇ injected env (5) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+DEBUG — EMAIL_USERNAME: test_agent@ktt.sg
+DEBUG — EMAIL_PASSWORD length: 8
+DEBUG — EMAIL_PASSWORD: Ktt@2026
+Backend running on http://192.168.1.40:\\.\pipe\e24237aa-396f-4212-a110-c003a0033349
+(also reachable locally at http://localhost:\\.\pipe\e24237aa-396f-4212-a110-c003a0033349)

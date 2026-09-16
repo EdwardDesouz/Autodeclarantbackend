@@ -1,0 +1,6 @@
+◇ injected env (5) from .env // tip: ⌘ enable debugging { debug: true }
+DEBUG — EMAIL_USERNAME: test_agent@ktt.sg
+DEBUG — EMAIL_PASSWORD length: 8
+DEBUG — EMAIL_PASSWORD: Ktt@2026
+Backend running on http://192.168.1.40:\\.\pipe\459dba62-e579-4bde-bccc-ba70061330ec
+(also reachable locally at http://localhost:\\.\pipe\459dba62-e579-4bde-bccc-ba70061330ec)
