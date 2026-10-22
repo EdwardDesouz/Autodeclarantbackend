@@ -5,6 +5,9 @@
 // import { simpleParser } from "mailparser";
 
 // dotenv.config();
+// console.log('DEBUG — EMAIL_USERNAME:', process.env.EMAIL_USERNAME);
+// console.log('DEBUG — EMAIL_PASSWORD length:', process.env.EMAIL_PASSWORD?.length);
+// console.log('DEBUG — EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD);
 // const app = express();
 // app.use(cors());
 // app.use(express.json());
@@ -38,6 +41,56 @@
 //   return connecting;
 // }
 
+// function isEmbeddedMessage(att) {
+//   return (
+//     att.contentType === "message/rfc822" ||
+//     (att.filename || "").toLowerCase().endsWith(".eml")
+//   );
+// }
+
+// async function extractNestedText(parsed) {
+//   const nested = [];
+//   for (const att of parsed.attachments) {
+//     if (isEmbeddedMessage(att)) {
+//       try {
+//         const innerParsed = await simpleParser(att.content);
+//         nested.push({
+//           from: innerParsed.from?.text || "",
+//           subject: innerParsed.subject || "",
+//           date: innerParsed.date,
+//           text: innerParsed.text || "",
+//         });
+//       } catch (e) {
+//         console.error("Failed to parse embedded message", e);
+//       }
+//     }
+//   }
+//   return nested;
+// }
+
+// // Builds one flat list combining direct attachments with any attachments
+// // nested inside embedded (.eml/message-rfc822) forwarded messages, so the
+// // list route and the download route always agree on indexing.
+// async function getAllAttachments(parsed) {
+//   const directAttachments = parsed.attachments.filter(
+//     (att) => !isEmbeddedMessage(att),
+//   );
+
+//   const nestedAttachments = [];
+//   for (const att of parsed.attachments) {
+//     if (isEmbeddedMessage(att)) {
+//       try {
+//         const innerParsed = await simpleParser(att.content);
+//         nestedAttachments.push(...innerParsed.attachments);
+//       } catch (e) {
+//         console.error("Failed to parse embedded message for attachments", e);
+//       }
+//     }
+//   }
+
+//   return [...directAttachments, ...nestedAttachments];
+// }
+
 // function getFileType(filename, contentType) {
 //   const ext = (filename || "").split(".").pop().toLowerCase();
 //   if (ext === "pdf" || contentType?.includes("pdf")) return "pdf";
@@ -55,6 +108,10 @@
 //   return count;
 // }
 
+// // ---------------------------------------------------------------------------
+// // GET /api/emails — list the most recent messages in INBOX (used by the
+// // sidebar). This was accidentally dropped in a previous edit — restored here.
+// // ---------------------------------------------------------------------------
 // app.get("/api/emails", async (req, res) => {
 //   try {
 //     const c = await getClient();
@@ -105,13 +162,26 @@
 //         { uid: true },
 //       );
 //       const parsed = await simpleParser(msg.source);
+//       const nestedMessages = await extractNestedText(parsed);
+
+//       let fullText = parsed.text || "";
+//       for (const nm of nestedMessages) {
+//         fullText +=
+//           `\n\n---------- Forwarded message ----------\n` +
+//           `From: ${nm.from}\nSubject: ${nm.subject}\n\n${nm.text}`;
+//       }
+
+//       const directAttachments = parsed.attachments.filter(
+//         (att) => !isEmbeddedMessage(att),
+//       );
+
 //       result = {
 //         id: req.params.id,
 //         sender: msg.envelope.from?.[0]?.address,
 //         subject: msg.envelope.subject,
 //         received_date: msg.envelope.date,
-//         body_preview: parsed.text?.slice(0, 500) || "",
-//         attachment_count: parsed.attachments.length,
+//         body_preview: fullText.slice(0, 2000),
+//         attachment_count: directAttachments.length,
 //         status: "received",
 //       };
 //     } finally {
@@ -137,7 +207,9 @@
 //         { uid: true },
 //       );
 //       const parsed = await simpleParser(msg.source);
-//       attachments = parsed.attachments.map((att, i) => ({
+//       const allAttachments = await getAllAttachments(parsed);
+
+//       attachments = allAttachments.map((att, i) => ({
 //         id: String(i),
 //         filename: att.filename || `attachment-${i}`,
 //         type: getFileType(att.filename, att.contentType),
@@ -166,7 +238,8 @@
 //         { uid: true },
 //       );
 //       const parsed = await simpleParser(msg.source);
-//       const att = parsed.attachments[Number(req.params.attId)];
+//       const allAttachments = await getAllAttachments(parsed);
+//       const att = allAttachments[Number(req.params.attId)];
 //       if (!att) return res.status(404).send("Not found");
 
 //       res.set("Content-Type", att.contentType || "application/pdf");
@@ -186,49 +259,9 @@
 // });
 
 // // Fetches the full email (with attachment bytes) by id and forwards it
-// // to n8n for declaration extraction.
-// // app.post('/api/email/:id/notify-n8n', async (req, res) => {
-// //   try {
-// //     const c = await getClient()
-// //     const lock = await c.getMailboxLock('INBOX')
-// //     let payload
-// //     try {
-// //       const msg = await c.fetchOne(req.params.id, { envelope: true, source: true }, { uid: true })
-// //       const parsed = await simpleParser(msg.source)
-
-// //       payload = {
-// //         id: req.params.id,
-// //         sender: parsed.from?.value?.[0]?.address || msg.envelope.from?.[0]?.address,
-// //         subject: parsed.subject || msg.envelope.subject,
-// //         received_date: msg.envelope.date,
-// //         body: parsed.text || '',
-// //         attachments: parsed.attachments.map((att) => ({
-// //           filename: att.filename || 'attachment',
-// //           contentType: att.contentType,
-// //           size: att.size,
-// //           content_base64: att.content.toString('base64'),
-// //         })),
-// //       }
-// //     } finally {
-// //       lock.release()
-// //     }
-
-// //     const n8nRes = await fetch(process.env.N8N_WEBHOOK_URL, {
-// //       method: 'POST',
-// //       headers: { 'Content-Type': 'application/json' },
-// //       body: JSON.stringify(payload),
-// //     })
-// //     if (!n8nRes.ok) throw new Error(`n8n responded ${n8nRes.status}`)
-// //     const data = await n8nRes.json().catch(() => ({}))
-// //     res.json({ success: true, n8n_response: data })
-// //   } catch (err) {
-// //     console.error('n8n notify failed:', err)
-// //     client = null // force reconnect next time
-// //     res.status(500).json({ error: 'Failed to notify n8n' })
-// //   }
-// // })
-
-// // and other file types are excluded.
+// // to n8n for declaration extraction. Only PDF attachments (direct or
+// // nested inside an embedded .eml forward) are sent; other file types
+// // are excluded.
 // app.post("/api/email/:id/notify-n8n", async (req, res) => {
 //   try {
 //     const c = await getClient();
@@ -241,8 +274,17 @@
 //         { uid: true },
 //       );
 //       const parsed = await simpleParser(msg.source);
+//       const nestedMessages = await extractNestedText(parsed);
 
-//       const pdfAttachments = parsed.attachments.filter(
+//       let fullText = parsed.text || "";
+//       for (const nm of nestedMessages) {
+//         fullText +=
+//           `\n\n---------- Forwarded message ----------\n` +
+//           `From: ${nm.from}\nSubject: ${nm.subject}\n\n${nm.text}`;
+//       }
+
+//       const allAttachments = await getAllAttachments(parsed);
+//       const pdfAttachments = allAttachments.filter(
 //         (att) => getFileType(att.filename, att.contentType) === "pdf",
 //       );
 
@@ -252,7 +294,7 @@
 //           parsed.from?.value?.[0]?.address || msg.envelope.from?.[0]?.address,
 //         subject: parsed.subject || msg.envelope.subject,
 //         received_date: msg.envelope.date,
-//         body: parsed.text || "",
+//         body: fullText,
 //         attachments: pdfAttachments.map((att) => ({
 //           filename: att.filename || "attachment.pdf",
 //           contentType: att.contentType,
@@ -265,15 +307,12 @@
 //     }
 
 //     console.log(`[n8n] sending request for email ${req.params.id}...`);
-
 //     const n8nRes = await fetch(process.env.N8N_WEBHOOK_URL, {
 //       method: "POST",
 //       headers: { "Content-Type": "application/json" },
 //       body: JSON.stringify(payload),
 //     });
-
 //     console.log(`[n8n] GOT RESPONSE — status ${n8nRes.status}`);
-
 //     if (!n8nRes.ok) throw new Error(`n8n responded ${n8nRes.status}`);
 //     const data = await n8nRes.json().catch(() => ({}));
 //     console.log(`[n8n] response body:`, data);
@@ -285,9 +324,13 @@
 //   }
 // });
 
-// app.listen(process.env.PORT, () => {
-//   console.log(`Backend running on http://localhost:${process.env.PORT}`);
+// app.listen(process.env.PORT, "0.0.0.0", () => {
+//   console.log(`Backend running on http://192.168.1.40:${process.env.PORT}`);
+//   console.log(
+//     `(also reachable locally at http://localhost:${process.env.PORT})`,
+//   );
 // });
+
 
 import express from "express";
 import cors from "cors";
@@ -296,9 +339,9 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 
 dotenv.config();
-console.log('DEBUG — EMAIL_USERNAME:', process.env.EMAIL_USERNAME);
-console.log('DEBUG — EMAIL_PASSWORD length:', process.env.EMAIL_PASSWORD?.length);
-console.log('DEBUG — EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD);
+// NOTE: never log the password. Only confirm that the values are loaded.
+console.log("ENV loaded — user:", process.env.EMAIL_USERNAME, "| password set:", !!process.env.EMAIL_PASSWORD);
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -320,7 +363,7 @@ async function getClient() {
         user: process.env.EMAIL_USERNAME,
         pass: process.env.EMAIL_PASSWORD,
       },
-      tls: { rejectUnauthorized: false },
+      tls: { rejectUnauthorized: false }, // TODO: fix certificate before production
       logger: false,
     });
     await c.connect();
@@ -382,6 +425,17 @@ async function getAllAttachments(parsed) {
   return [...directAttachments, ...nestedAttachments];
 }
 
+// Combines the main body with the text of any forwarded .eml messages.
+function buildFullText(parsed, nestedMessages) {
+  let fullText = parsed.text || "";
+  for (const nm of nestedMessages) {
+    fullText +=
+      `\n\n---------- Forwarded message ----------\n` +
+      `From: ${nm.from}\nSubject: ${nm.subject}\n\n${nm.text}`;
+  }
+  return fullText;
+}
+
 function getFileType(filename, contentType) {
   const ext = (filename || "").split(".").pop().toLowerCase();
   if (ext === "pdf" || contentType?.includes("pdf")) return "pdf";
@@ -400,8 +454,7 @@ function countAttachments(node) {
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/emails — list the most recent messages in INBOX (used by the
-// sidebar). This was accidentally dropped in a previous edit — restored here.
+// GET /api/emails — list the most recent messages in INBOX (sidebar)
 // ---------------------------------------------------------------------------
 app.get("/api/emails", async (req, res) => {
   try {
@@ -454,13 +507,7 @@ app.get("/api/email/:id", async (req, res) => {
       );
       const parsed = await simpleParser(msg.source);
       const nestedMessages = await extractNestedText(parsed);
-
-      let fullText = parsed.text || "";
-      for (const nm of nestedMessages) {
-        fullText +=
-          `\n\n---------- Forwarded message ----------\n` +
-          `From: ${nm.from}\nSubject: ${nm.subject}\n\n${nm.text}`;
-      }
+      const fullText = buildFullText(parsed, nestedMessages);
 
       const directAttachments = parsed.attachments.filter(
         (att) => !isEmbeddedMessage(att),
@@ -550,9 +597,12 @@ app.get("/api/email/:id/attachments/:attId", async (req, res) => {
 });
 
 // Fetches the full email (with attachment bytes) by id and forwards it
-// to n8n for declaration extraction. Only PDF attachments (direct or
-// nested inside an embedded .eml forward) are sent; other file types
-// are excluded.
+// to n8n. The payload includes the full email body (main text + forwarded
+// messages) so n8n can read FLIGHT #, FLT DATE, COUNTRY OF ORIGIN, MAWB.
+// Only PDF attachments (direct or nested in a forwarded .eml) are sent.
+//
+// In n8n the Webhook node puts this JSON under $json.body, so the email
+// text is at $json.body.body.
 app.post("/api/email/:id/notify-n8n", async (req, res) => {
   try {
     const c = await getClient();
@@ -566,13 +616,7 @@ app.post("/api/email/:id/notify-n8n", async (req, res) => {
       );
       const parsed = await simpleParser(msg.source);
       const nestedMessages = await extractNestedText(parsed);
-
-      let fullText = parsed.text || "";
-      for (const nm of nestedMessages) {
-        fullText +=
-          `\n\n---------- Forwarded message ----------\n` +
-          `From: ${nm.from}\nSubject: ${nm.subject}\n\n${nm.text}`;
-      }
+      const fullText = buildFullText(parsed, nestedMessages);
 
       const allAttachments = await getAllAttachments(parsed);
       const pdfAttachments = allAttachments.filter(
@@ -596,6 +640,20 @@ app.post("/api/email/:id/notify-n8n", async (req, res) => {
     } finally {
       lock.release();
     }
+
+    // Preview of what is being sent (no base64 data, body truncated)
+    console.log("[n8n] payload preview:", {
+      id: payload.id,
+      sender: payload.sender,
+      subject: payload.subject,
+      received_date: payload.received_date,
+      bodyLength: payload.body.length,
+      bodyStart: payload.body.slice(0, 300),
+      hasFlightFields: /FLIGHT\s*#/i.test(payload.body),
+      attachments: payload.attachments.map(
+        (a) => `${a.filename} (${a.size} bytes)`,
+      ),
+    });
 
     console.log(`[n8n] sending request for email ${req.params.id}...`);
     const n8nRes = await fetch(process.env.N8N_WEBHOOK_URL, {
